@@ -18,7 +18,7 @@
 
 /* 
 Please specify the group members here
-# Student #1: William Alexander .
+# Student #1: William Alexander
 # Student #2: none :(
 # Student #3: none :(
 */
@@ -42,6 +42,7 @@ int server_port = 12345;
 int num_client_threads = DEFAULT_CLIENT_THREADS;
 int num_requests = 1000000;
 
+/* Structure for storing client thread data */
 typedef struct {
     int epoll_fd;
     int socket_fd;
@@ -52,6 +53,7 @@ typedef struct {
     int rx_cnt;
 } client_thread_data_t;
 
+/* Client thread function */
 void *client_thread_func(void *arg) {
     client_thread_data_t *data = (client_thread_data_t *)arg;
     struct epoll_event event, events[MAX_EVENTS];
@@ -59,6 +61,8 @@ void *client_thread_func(void *arg) {
     char recv_buf[MESSAGE_SIZE];
     struct timeval start, end;
 
+     // Hint 1: register the "connected" client_thread's socket in the its epoll instance
+    // Hint 2: use gettimeofday() and "struct timeval start, end" to record timestamp, which can be used to calculated RTT.
     for (int i = 0; i < num_requests; i++) {
         gettimeofday(&start, NULL);
         sendto(data->socket_fd, send_buf, MESSAGE_SIZE, 0,
@@ -87,6 +91,10 @@ void *client_thread_func(void *arg) {
     return NULL;
 }
 
+/*
+ * This function orchestrates multiple client threads to send requests to a server,
+ * collect performance data of each threads, and compute aggregated metrics of all threads.
+ */
 void run_client() {
     pthread_t threads[num_client_threads];
     client_thread_data_t thread_data[num_client_threads];
@@ -115,6 +123,10 @@ void run_client() {
     long total_messages = 0;
     int total_tx = 0, total_rx = 0;
 
+
+
+    // Hint: use thread_data to save the created socket and epoll instance for each thread
+    // You will pass the thread_data to pthread_create() as below
     for (int i = 0; i < num_client_threads; i++) {
         pthread_join(threads[i], NULL);
         total_rtt += thread_data[i].total_rtt;
@@ -125,11 +137,13 @@ void run_client() {
         close(thread_data[i].epoll_fd);
     }
 
+    /* Keeps track of total RTT, total number of requests, and total number of packets */
     printf("Average RTT: %lld us\n", total_messages ? total_rtt / total_messages : 0);
     printf("Total Request Rate: %f messages/s\n", (double)total_messages / (total_rtt / 1000000.0));
     printf("Total Packets Sent: %d, Received: %d, Lost: %d\n", total_tx, total_rx, total_tx - total_rx);
 }
 
+/* Server implementation */
 void run_server() {
     int server_fd, epoll_fd;
     struct sockaddr_in server_addr, client_addr;
@@ -148,6 +162,7 @@ void run_server() {
     event.data.fd = server_fd;
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event);
 
+    /* Server's run-to-completion event loop | changed to use UDP*/
     while (1) {
         int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
         for (int i = 0; i < nfds; i++) {
@@ -168,6 +183,7 @@ void run_server() {
     close(epoll_fd);
 }
 
+/* Main function, calls either run_server() or run_client() | if the arguments are invalid it will print how to use properly. */
 int main(int argc, char *argv[]) {
     if (argc > 1 && strcmp(argv[1], "server") == 0) {
         if (argc > 2) server_ip = argv[2];
@@ -184,3 +200,4 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
+
